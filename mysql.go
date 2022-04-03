@@ -8,19 +8,27 @@ import (
 	"strings"
 	"time"
 )
+
 type DB struct {
 	Drivers          []*sql.DB
 	tableName        string
-	shardsCount      uint
 	createTableQuery string
 
-	hashFunc     func(interface{}) uint
+	shardsCount     uint
+	dataSourcesURLs []string
+
+	hashFunc func(interface{}) uint
+}
+
+var shiftTableIterator int
+
+func init() {
+	shiftTableIterator = 1
 }
 
 func StandardGetShardFunc(key interface{}) uint {
 	return fnv32(key.(string))
 }
-
 func fnv32(key string) uint {
 	hash := uint(2166136261)
 	const prime32 = uint(16777619)
@@ -31,11 +39,9 @@ func fnv32(key string) uint {
 	}
 	return hash
 }
-
 func getDrivers(dataSources ...string) []*sql.DB {
 	drivers := make([]*sql.DB, len(dataSources))
 	for i := 0; i < len(dataSources); i++ {
-		fmt.Println(dataSources[i])
 		driver, err := sql.Open("mysql", dataSources[i])
 		if err != nil {
 			fmt.Println("getDrivers error " + err.Error())
@@ -48,11 +54,9 @@ func getDrivers(dataSources ...string) []*sql.DB {
 	}
 	return drivers
 }
-
 func (db *DB) getShardFunc(key interface{}) uint {
 	return db.hashFunc(key) % db.shardsCount
 }
-
 func (db *DB) createTables() {
 	for i := 0; i < len(db.Drivers); i++ {
 		_, err := db.Drivers[i].Exec(strings.Replace(db.createTableQuery, "{table_name}", db.tableName+strconv.Itoa(i), 1))
@@ -65,16 +69,31 @@ func (db *DB) createTables() {
 
 func New(tableName string, shardsCount uint, createTables bool, createTableQuery string, dataSources ...string) *DB {
 	db := DB{
+		dataSourcesURLs:  dataSources,
 		Drivers:          getDrivers(dataSources...),
 		createTableQuery: createTableQuery,
 		tableName:        tableName,
 		shardsCount:      shardsCount,
-		hashFunc:     	  StandardGetShardFunc,
+		hashFunc:         StandardGetShardFunc,
 	}
 	if createTables {
 		db.createTables()
 	}
 	return &db
+}
+
+func (db *DB) ShiftData(newShardsCount uint, newDataSources ...string) {
+	newDB := DB{
+		Drivers:          getDrivers(newDataSources...),
+		tableName:        db.tableName + "",
+		createTableQuery: "",
+		shardsCount:      0,
+		dataSourcesURLs:  nil,
+		hashFunc:         nil,
+	}
+	for i := 0; i < len(newDrivers); i++ {
+
+	}
 }
 
 func (db *DB) Execute(query string, key string, args ...interface{}) error {
